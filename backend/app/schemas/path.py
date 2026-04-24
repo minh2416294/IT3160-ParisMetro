@@ -14,6 +14,7 @@ class PathStepOut(BaseModel):
     kind: str  # "walk" | "ride" | "transfer" | "enter" | "exit"
     description: str
     duration_s: float
+    distance_m: float = 0.0
     line_id: str | None = None
 
 

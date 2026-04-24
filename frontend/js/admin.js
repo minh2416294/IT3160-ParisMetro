@@ -4,13 +4,13 @@ let adminMode = null; // "station" | "segment-a" | "segment-b" | null
 let segmentFirst = null; // {station_id, line_id} while picking segment end
 
 function showLogin() {
-  document.getElementById("login-panel").style.display = "block";
+  document.getElementById("login-panel").style.display = "flex";
   document.getElementById("dashboard").style.display = "none";
 }
 
 function showDashboard() {
   document.getElementById("login-panel").style.display = "none";
-  document.getElementById("dashboard").style.display = "block";
+  document.getElementById("dashboard").style.display = "grid";
 }
 
 async function handleLogin(e) {

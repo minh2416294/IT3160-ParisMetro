@@ -34,6 +34,7 @@ def find_path(
                 kind=s.kind,
                 description=s.description,
                 duration_s=s.duration_s,
+                distance_m=s.distance_m,
                 line_id=s.line_id,
             )
             for s in result.steps

@@ -44,6 +44,11 @@ function fmtDuration(seconds) {
   return `${m}m ${rem}s`;
 }
 
+function fmtDistance(meters) {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
+  return `${Math.round(meters)} m`;
+}
+
 async function findPath() {
   const banner = document.getElementById("result-banner");
   const stepsEl = document.getElementById("result-steps");
@@ -91,13 +96,14 @@ function renderItinerary(data) {
   const banner = document.getElementById("result-banner");
   const stepsEl = document.getElementById("result-steps");
   banner.className = "success";
-  banner.textContent = `Total: ${fmtDuration(data.total_time_s)}`;
+  const totalDist = data.steps.reduce((sum, s) => sum + (s.distance_m || 0), 0);
+  banner.textContent = `Total: ${fmtDuration(data.total_time_s)} · ${fmtDistance(totalDist)}`;
 
   stepsEl.innerHTML = "";
   for (const s of data.steps) {
     const li = document.createElement("li");
     li.className = `step step-${s.kind}`;
-    if (s.line_id) {
+    if (s.line_id && (s.kind === "ride" || s.kind === "enter" || s.kind === "transfer")) {
       const badge = document.createElement("span");
       badge.className = "line-badge";
       badge.style.backgroundColor = colorForLine(s.line_id);
@@ -105,10 +111,21 @@ function renderItinerary(data) {
       li.appendChild(badge);
     }
     const text = document.createElement("span");
-    text.textContent = `${s.description} (${fmtDuration(s.duration_s)})`;
+    text.textContent = formatStepText(s);
     li.appendChild(text);
     stepsEl.appendChild(li);
   }
+}
+
+function formatStepText(s) {
+  // enter/exit: hide time (they're short transitions)
+  if (s.kind === "enter" || s.kind === "exit") return s.description;
+  const parts = [s.description];
+  const extras = [];
+  if (s.distance_m && s.distance_m >= 1) extras.push(fmtDistance(s.distance_m));
+  if (s.duration_s && s.duration_s >= 1) extras.push(fmtDuration(s.duration_s));
+  if (extras.length) parts.push(`— ${extras.join(" · ")}`);
+  return parts.join(" ");
 }
 
 async function loadDisruptionBanner() {
@@ -139,6 +156,33 @@ function resetSelection() {
   document.getElementById("result-steps").innerHTML = "";
 }
 
+function buildLineFilter() {
+  const container = document.getElementById("line-toggles");
+  if (!container) return;
+  container.innerHTML = "";
+  for (const lid of getAllLineIds()) {
+    const label = document.createElement("label");
+    label.className = "line-toggle";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.addEventListener("change", () => setLineVisible(lid, cb.checked));
+    const badge = document.createElement("span");
+    badge.className = "line-badge";
+    badge.style.backgroundColor = colorForLine(lid);
+    badge.textContent = lid;
+    label.appendChild(cb);
+    label.appendChild(badge);
+    container.appendChild(label);
+  }
+}
+
+function setAllToggles(visible) {
+  setAllLinesVisible(visible);
+  const cbs = document.querySelectorAll("#line-toggles input[type=checkbox]");
+  cbs.forEach((c) => (c.checked = visible));
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   initMap("map");
   map.on("click", onMapClick);
@@ -147,9 +191,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-pick-end").addEventListener("click", () => setClickMode("end"));
   document.getElementById("btn-find").addEventListener("click", findPath);
   document.getElementById("btn-reset").addEventListener("click", resetSelection);
+  document.getElementById("btn-show-all-lines").addEventListener("click", () => setAllToggles(true));
+  document.getElementById("btn-hide-all-lines").addEventListener("click", () => setAllToggles(false));
 
   try {
     await loadNetwork();
+    buildLineFilter();
   } catch (e) {
     const banner = document.getElementById("result-banner");
     banner.className = "error";

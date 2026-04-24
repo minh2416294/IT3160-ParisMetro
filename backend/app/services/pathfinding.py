@@ -61,6 +61,7 @@ class PathStep:
     kind: str
     description: str
     duration_s: float
+    distance_m: float = 0.0
     line_id: str | None = None
 
 
@@ -363,6 +364,14 @@ class PathfindingService:
     ) -> PathResult:
         coords = [self._coord(i, overlay) for i in path_idx]
 
+        def segment_distance(start: int, stop: int) -> float:
+            total = 0.0
+            for k in range(start, stop):
+                a = self._coord(path_idx[k], overlay)
+                b = self._coord(path_idx[k + 1], overlay)
+                total += haversine_m(a[0], a[1], b[0], b[1])
+            return total
+
         steps: list[PathStep] = []
         i = 0
         while i < len(path_edges):
@@ -371,13 +380,15 @@ class PathfindingService:
             to_node = self._nodes[path_idx[i + 1]] if path_idx[i + 1] < len(self._nodes) else None
 
             if edge.kind == "walk":
-                # Coalesce consecutive walk edges.
                 dur = 0.0
                 j = i
                 while j < len(path_edges) and path_edges[j].kind == "walk":
                     dur += path_edges[j].weight
                     j += 1
-                steps.append(PathStep(kind="walk", description=f"Walk ({self._fmt_dur(dur)})", duration_s=dur))
+                dist = segment_distance(i, j)
+                steps.append(
+                    PathStep(kind="walk", description="Walk", duration_s=dur, distance_m=dist)
+                )
                 i = j
                 continue
 
@@ -388,6 +399,7 @@ class PathfindingService:
                             kind="enter",
                             description=f"Enter metro at {to_node.station_name} (Line {to_node.line_id})",
                             duration_s=edge.weight,
+                            distance_m=segment_distance(i, i + 1),
                             line_id=to_node.line_id,
                         )
                     )
@@ -398,13 +410,13 @@ class PathfindingService:
                             kind="exit",
                             description=f"Exit metro at {name} to street",
                             duration_s=edge.weight,
+                            distance_m=segment_distance(i, i + 1),
                         )
                     )
                 i += 1
                 continue
 
             if edge.kind == "ride":
-                # Coalesce consecutive rides on the same line.
                 dur = 0.0
                 j = i
                 last_to = to_node
@@ -424,6 +436,7 @@ class PathfindingService:
                         kind="ride",
                         description=f"Take Line {edge.line_id} from {start_name} to {end_name}",
                         duration_s=dur,
+                        distance_m=segment_distance(i, j),
                         line_id=edge.line_id,
                     )
                 )
@@ -438,6 +451,7 @@ class PathfindingService:
                         kind="transfer",
                         description=f"Transfer at {name} to Line {line_to}",
                         duration_s=edge.weight,
+                        distance_m=0.0,
                         line_id=line_to,
                     )
                 )
@@ -447,10 +461,3 @@ class PathfindingService:
             i += 1  # fallback
 
         return PathResult(total_time_s=total_time, steps=steps, coords=coords)
-
-    @staticmethod
-    def _fmt_dur(seconds: float) -> str:
-        m, s = divmod(int(seconds), 60)
-        if m == 0:
-            return f"{s}s"
-        return f"{m}m {s}s"

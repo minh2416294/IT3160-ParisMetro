@@ -271,3 +271,28 @@ button:active {
   color: var(--danger);
   font-size: 13px;
 }
+
+.line-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.line-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.line-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.line-toggle:hover {
+  background: #eef1f8;
+}

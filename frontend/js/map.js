@@ -1,15 +1,17 @@
 // Leaflet setup, network rendering, route drawing, endpoint markers.
 
 let map;
-let networkLayer;       // L.LayerGroup for line segments + station markers
-let routeLayer;         // L.LayerGroup for the computed route + endpoint pins
-let stationMarkers = {}; // station_id -> L.CircleMarker (for admin click-to-close)
+let stationLayer;        // L.LayerGroup for station markers
+let routeLayer;          // L.LayerGroup for the computed route + endpoint pins
+let lineLayers = {};     // line_id -> L.LayerGroup of polylines
+let lineVisibility = {}; // line_id -> bool
+let stationMarkers = {}; // station_id -> L.CircleMarker
 let networkData = null;  // cached /api/network response
 
 function initMap(elementId = "map") {
   map = L.map(elementId).setView(MAP_CENTER, MAP_ZOOM);
   L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
-  networkLayer = L.layerGroup().addTo(map);
+  stationLayer = L.layerGroup().addTo(map);
   routeLayer = L.layerGroup().addTo(map);
   return map;
 }
@@ -23,10 +25,20 @@ async function loadNetwork() {
 }
 
 function renderNetwork(data) {
-  networkLayer.clearLayers();
+  // Clear old layers.
+  for (const lid of Object.keys(lineLayers)) {
+    map.removeLayer(lineLayers[lid]);
+  }
+  lineLayers = {};
+  lineVisibility = {};
+  stationLayer.clearLayers();
   stationMarkers = {};
 
   for (const seg of data.segments) {
+    if (!lineLayers[seg.line_id]) {
+      lineLayers[seg.line_id] = L.layerGroup().addTo(map);
+      lineVisibility[seg.line_id] = true;
+    }
     L.polyline(
       [
         [seg.from_lat, seg.from_lng],
@@ -37,7 +49,7 @@ function renderNetwork(data) {
         weight: 4,
         opacity: 0.85,
       }
-    ).addTo(networkLayer);
+    ).addTo(lineLayers[seg.line_id]);
   }
 
   for (const st of data.stations) {
@@ -49,12 +61,38 @@ function renderNetwork(data) {
       fillOpacity: 1,
     })
       .bindTooltip(`<b>${st.name}</b><br>Lines: ${st.lines.join(", ")}`)
-      .addTo(networkLayer);
+      .addTo(stationLayer);
     marker.stationId = st.id;
     marker.stationName = st.name;
     marker.stationLines = st.lines;
     stationMarkers[st.id] = marker;
   }
+}
+
+function setLineVisible(lineId, visible) {
+  const layer = lineLayers[lineId];
+  if (!layer) return;
+  lineVisibility[lineId] = visible;
+  if (visible) {
+    if (!map.hasLayer(layer)) map.addLayer(layer);
+  } else {
+    if (map.hasLayer(layer)) map.removeLayer(layer);
+  }
+}
+
+function setAllLinesVisible(visible) {
+  for (const lid of Object.keys(lineLayers)) setLineVisible(lid, visible);
+}
+
+function getAllLineIds() {
+  return Object.keys(lineLayers).sort(compareLineIds);
+}
+
+function compareLineIds(a, b) {
+  const na = parseFloat(a);
+  const nb = parseFloat(b);
+  if (isNaN(na) || isNaN(nb)) return a.localeCompare(b);
+  return na - nb || a.localeCompare(b);
 }
 
 function drawRoute(coords) {
