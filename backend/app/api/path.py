@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from backend.app.dependencies.services import get_pathfinder, get_scenario_service
+from backend.app.schemas.path import PathRequest, PathResponse, PathStepOut
+from backend.app.services.pathfinding import PathfindingService, PathNotFoundError
+from backend.app.services.scenario import ScenarioService
+
+router = APIRouter(prefix="/api", tags=["path"])
+
+
+@router.post("/path", response_model=PathResponse)
+def find_path(
+    req: PathRequest,
+    pathfinder: PathfindingService = Depends(get_pathfinder),
+    scenarios: ScenarioService = Depends(get_scenario_service),
+) -> PathResponse:
+    try:
+        result = pathfinder.find_path(
+            lat_start=req.lat_start,
+            lng_start=req.lng_start,
+            lat_end=req.lat_end,
+            lng_end=req.lng_end,
+            closures=scenarios.get_mask(),
+        )
+    except PathNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return PathResponse(
+        total_time_s=result.total_time_s,
+        steps=[
+            PathStepOut(
+                kind=s.kind,
+                description=s.description,
+                duration_s=s.duration_s,
+                line_id=s.line_id,
+            )
+            for s in result.steps
+        ],
+        coords=result.coords,
+    )
