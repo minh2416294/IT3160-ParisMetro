@@ -52,8 +52,13 @@ def download(url: str, dest: Path) -> None:
 def extract(zip_path: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Extracting {zip_path.name} -> {out_dir}")
+    out_resolved = out_dir.resolve()
     with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(out_dir, filter="data")
+        for member in zf.infolist():
+            target = (out_dir / member.filename).resolve()
+            if not str(target).startswith(str(out_resolved)):
+                raise RuntimeError(f"Unsafe zip entry rejected: {member.filename}")
+            zf.extract(member, out_dir)
     print(f"Extracted {len(list(out_dir.iterdir()))} entries.")
 
 
