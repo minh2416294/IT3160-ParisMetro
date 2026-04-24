@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paris Metro Admin</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Paris Metro Navigator — Admin</h1>
+      <nav>
+        <a href="/index.html">User</a>
+        <a href="/admin.html" class="nav-current">Admin</a>
+        <button id="btn-logout" class="ghost-btn">Logout</button>
+      </nav>
+    </header>
+
+    <div id="login-panel" class="login-panel">
+      <form id="login-form" class="login-card">
+        <h2>Admin Login</h2>
+        <label>
+          Username
+          <input id="login-username" type="text" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input id="login-password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="accent-btn">Log in</button>
+        <p id="login-error" class="error"></p>
+      </form>
+    </div>
+
+    <main id="dashboard" class="app" style="display: none">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Create scenario</h2>
+          <div class="row">
+            <button id="btn-mode-station" class="primary-btn">Close station</button>
+          </div>
+          <div class="row">
+            <label>
+              Line:
+              <select id="segment-line-select"></select>
+            </label>
+            <button id="btn-mode-segment" class="primary-btn">Close segment</button>
+          </div>
+          <div class="row">
+            <label>
+              Line:
+              <select id="line-select"></select>
+            </label>
+            <button id="btn-close-line" class="primary-btn">Close line</button>
+          </div>
+          <p id="admin-hint" class="hint"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Active scenarios</h2>
+          <ul id="scenario-list" class="scenario-list"></ul>
+          <button id="btn-clear-all" class="danger-btn">Clear all</button>
+        </section>
+      </aside>
+
+      <div id="map" class="map"></div>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/map.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

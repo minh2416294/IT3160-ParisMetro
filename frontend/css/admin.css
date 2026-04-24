@@ -1,0 +1,129 @@
+/* Admin-only styling. Loaded after style.css. */
+
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 56px);
+  background: var(--bg);
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 28px 32px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-card h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.login-card input {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text);
+  background: #fff;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(31, 59, 139, 0.15);
+}
+
+.login-card button {
+  margin-top: 6px;
+}
+
+.topbar nav #btn-logout {
+  padding: 4px 10px;
+  font-size: 13px;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.topbar nav #btn-logout:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+select {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.row label {
+  font-size: 13px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#admin-hint {
+  background: #eef1f8;
+  color: var(--primary);
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  min-height: 16px;
+}
+
+.scenario-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.scenario-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f8f9fb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.scenario-list li.empty {
+  justify-content: center;
+  color: var(--muted);
+  font-style: italic;
+  background: transparent;
+}
+
+.scenario-list button {
+  padding: 4px 10px;
+  font-size: 12px;
+}

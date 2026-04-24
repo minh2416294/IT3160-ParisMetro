@@ -1,0 +1,273 @@
+/* Shared styling for user and admin pages. */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e3e6ea;
+  --text: #1d1f22;
+  --muted: #6b7280;
+  --primary: #1f3b8b;
+  --primary-hover: #162c6c;
+  --accent: #e0a800;
+  --accent-hover: #b78a00;
+  --success: #2e7d32;
+  --danger: #c62828;
+  --danger-hover: #a11a1a;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow);
+  height: 56px;
+}
+
+.topbar h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+
+.topbar nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar nav a {
+  color: #fff;
+  text-decoration: none;
+  opacity: 0.8;
+  font-size: 14px;
+}
+
+.topbar nav a:hover {
+  opacity: 1;
+}
+
+.topbar nav a.nav-current {
+  opacity: 1;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 2px;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  height: calc(100vh - 56px);
+}
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.map {
+  height: 100%;
+  width: 100%;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.row:last-child {
+  margin-bottom: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: background 0.15s, transform 0.05s;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.primary-btn {
+  background: #eef1f8;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
+.primary-btn:hover,
+.primary-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.accent-btn {
+  background: var(--accent);
+  color: #3b2b00;
+  font-weight: 600;
+}
+
+.accent-btn:hover {
+  background: var(--accent-hover);
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.danger-btn {
+  background: var(--danger);
+  color: #fff;
+}
+
+.danger-btn:hover {
+  background: var(--danger-hover);
+}
+
+.coord {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.disruption {
+  background: #fff4e5;
+  color: #8a5a00;
+  border: 1px solid #f2c27a;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+#result-banner {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 8px;
+  min-height: 18px;
+}
+
+#result-banner.success {
+  background: #e6f4ea;
+  color: var(--success);
+  border: 1px solid #b7dfc0;
+  font-weight: 600;
+}
+
+#result-banner.error {
+  background: #fdecea;
+  color: var(--danger);
+  border: 1px solid #f5b5b0;
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8f9fb;
+  font-size: 14px;
+  border-left: 3px solid var(--border);
+}
+
+.step-walk {
+  border-left-color: #8c9094;
+}
+
+.step-ride {
+  border-left-color: var(--primary);
+}
+
+.step-transfer {
+  border-left-color: var(--accent);
+}
+
+.step-enter,
+.step-exit {
+  border-left-color: var(--success);
+}
+
+.line-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: var(--shadow);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+}
