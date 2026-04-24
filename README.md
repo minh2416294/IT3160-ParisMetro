@@ -90,7 +90,7 @@ Copy-Item .env.example .env
 ### macOS / Linux (bash)
 
 ```bash
-git clone git clone https://github.com/minh2416294/IT3160-ParisMetro
+git clone https://github.com/minh2416294/IT3160-ParisMetro
 cd IT3160-ParisMetro
 
 python3 -m venv .venv
