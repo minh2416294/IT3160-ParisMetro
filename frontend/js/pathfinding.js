@@ -24,10 +24,12 @@ function onMapClick(e) {
     startPt = { lat, lng };
     setEndpointMarker("start", lat, lng);
     document.getElementById("start-coord").textContent = fmtCoord(lat, lng);
+    document.getElementById("input-start").value = "";
   } else if (clickMode === "end") {
     endPt = { lat, lng };
     setEndpointMarker("end", lat, lng);
     document.getElementById("end-coord").textContent = fmtCoord(lat, lng);
+    document.getElementById("input-end").value = "";
   }
   setClickMode(null);
 }
@@ -151,6 +153,10 @@ function resetSelection() {
   clearRoute();
   document.getElementById("start-coord").textContent = "—";
   document.getElementById("end-coord").textContent = "—";
+  document.getElementById("input-start").value = "";
+  document.getElementById("input-end").value = "";
+  closeDropdown("dropdown-start");
+  closeDropdown("dropdown-end");
   document.getElementById("result-banner").textContent = "";
   document.getElementById("result-banner").className = "";
   document.getElementById("result-steps").innerHTML = "";
@@ -183,6 +189,95 @@ function setAllToggles(visible) {
   cbs.forEach((c) => (c.checked = visible));
 }
 
+function normalizeText(str) {
+  return str.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+function closeDropdown(dropdownId) {
+  const el = document.getElementById(dropdownId);
+  if (el) {
+    el.innerHTML = "";
+    el.classList.remove("open");
+  }
+}
+
+function setupStationSearch(inputId, dropdownId, role) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+
+  input.addEventListener("input", () => {
+    const query = normalizeText(input.value.trim());
+    dropdown.innerHTML = "";
+    if (!query || !networkData) {
+      dropdown.classList.remove("open");
+      return;
+    }
+
+    const matches = networkData.stations
+      .filter((st) => normalizeText(st.name).includes(query))
+      .sort((a, b) => {
+        const aN = normalizeText(a.name).startsWith(query) ? 0 : 1;
+        const bN = normalizeText(b.name).startsWith(query) ? 0 : 1;
+        return aN - bN || a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+
+    if (matches.length === 0) {
+      dropdown.classList.remove("open");
+      return;
+    }
+
+    for (const st of matches) {
+      const li = document.createElement("li");
+
+      const name = document.createElement("span");
+      name.textContent = st.name;
+      li.appendChild(name);
+
+      for (const lid of st.lines) {
+        const badge = document.createElement("span");
+        badge.className = "line-badge";
+        badge.style.backgroundColor = colorForLine(lid);
+        badge.textContent = lid;
+        li.appendChild(badge);
+      }
+
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.value = st.name;
+        dropdown.classList.remove("open");
+        dropdown.innerHTML = "";
+
+        const coordSpanId = role === "start" ? "start-coord" : "end-coord";
+        if (role === "start") {
+          startPt = { lat: st.lat, lng: st.lng };
+          setEndpointMarker("start", st.lat, st.lng);
+        } else {
+          endPt = { lat: st.lat, lng: st.lng };
+          setEndpointMarker("end", st.lat, st.lng);
+        }
+        document.getElementById(coordSpanId).textContent = fmtCoord(st.lat, st.lng);
+        setClickMode(null);
+      });
+
+      dropdown.appendChild(li);
+    }
+
+    dropdown.classList.add("open");
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      dropdown.classList.remove("open");
+      dropdown.innerHTML = "";
+    }, 150);
+  });
+
+  input.addEventListener("focus", () => {
+    if (input.value.trim()) input.dispatchEvent(new Event("input"));
+  });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   initMap("map");
   map.on("click", onMapClick);
@@ -197,6 +292,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadNetwork();
     buildLineFilter();
+    setupStationSearch("input-start", "dropdown-start", "start");
+    setupStationSearch("input-end", "dropdown-end", "end");
   } catch (e) {
     const banner = document.getElementById("result-banner");
     banner.className = "error";

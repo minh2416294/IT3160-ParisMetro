@@ -296,3 +296,60 @@ button:active {
 .line-toggle:hover {
   background: #eef1f8;
 }
+
+.station-search {
+  position: relative;
+  flex: 1;
+}
+
+.station-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+}
+
+.station-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(31, 59, 139, 0.15);
+}
+
+.station-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 2px;
+  padding: 4px 0;
+  list-style: none;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.station-dropdown.open {
+  display: block;
+}
+
+.station-dropdown li {
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.station-dropdown li:hover {
+  background: #eef1f8;
+}
