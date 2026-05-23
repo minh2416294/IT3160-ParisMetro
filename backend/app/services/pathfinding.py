@@ -13,8 +13,23 @@ from backend.app.database import get_db_connection
 logger = logging.getLogger(__name__)
 
 WALK_SPEED_MPS = 1.4
-V_MAX_MPS = 15.0  # upper bound on any edge speed; keeps A* heuristic admissible
+RIDE_TIME_FACTOR = 0.75
+# V_MAX must exceed every effective edge speed. Scaling ride times by
+# RIDE_TIME_FACTOR raises the effective max ride speed by 1/RIDE_TIME_FACTOR,
+# so V_MAX is scaled in lockstep to keep the A* heuristic admissible.
+V_MAX_MPS = 15.0 / RIDE_TIME_FACTOR
 EARTH_RADIUS_M = 6_371_000
+
+# Extra entrance edges per platform on top of the single one loaded from DB:
+# attach the K nearest walk nodes within R_MAX_M so walking paths can enter
+# or leave a platform from any nearby street, not just one fixed point.
+ENTRANCE_K = 3
+ENTRANCE_R_MAX_M = 150.0
+
+# When a query endpoint falls within this radius of a real platform, attach
+# the virtual start/end node directly to that platform. Prevents routes from
+# terminating at an arbitrary walk node near (but not at) a station.
+STATION_SNAP_R_M = 100.0
 
 
 def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -94,6 +109,8 @@ class PathfindingService:
         self._platform_idx_by_id: dict[int, int] = {}
         self._walk_tree: cKDTree | None = None
         self._walk_indices: list[int] = []
+        self._platform_tree: cKDTree | None = None
+        self._platform_indices: list[int] = []
         self._load()
 
     # ---------------- loading ----------------
@@ -153,7 +170,12 @@ class PathfindingService:
             if a is None or b is None:
                 continue
             self._adj[a].append(
-                _Edge(to_idx=b, weight=r["travel_time_s"], kind="ride", line_id=r["line_id"])
+                _Edge(
+                    to_idx=b,
+                    weight=r["travel_time_s"] * RIDE_TIME_FACTOR,
+                    kind="ride",
+                    line_id=r["line_id"],
+                )
             )
 
         for r in transfer_rows:
@@ -179,11 +201,52 @@ class PathfindingService:
             coords = [(self._nodes[i].lat, self._nodes[i].lng) for i in self._walk_indices]
             self._walk_tree = cKDTree(coords)
 
+        self._platform_indices = [n.idx for n in self._nodes if n.kind == "platform"]
+        if self._platform_indices:
+            plat_coords = [
+                (self._nodes[i].lat, self._nodes[i].lng) for i in self._platform_indices
+            ]
+            self._platform_tree = cKDTree(plat_coords)
+
+        self._augment_entrances()
+
         logger.info(
             "Graph loaded: %d nodes, %d edges",
             len(self._nodes),
             sum(len(a) for a in self._adj),
         )
+
+    def _augment_entrances(self) -> None:
+        """Add up to ENTRANCE_K nearest walk-node entrances per platform.
+
+        The DB ships exactly one entrance per platform (the nearest walk node).
+        When that node is geometrically far from the platform, the resulting
+        polyline jumps awkwardly. Extra edges let A* pick a closer entrance.
+        """
+        if self._walk_tree is None or not self._platform_indices:
+            return
+
+        existing: set[tuple[int, int]] = set()
+        for p_idx in self._platform_indices:
+            for edge in self._adj[p_idx]:
+                if edge.kind == "entrance":
+                    existing.add((p_idx, edge.to_idx))
+
+        for p_idx in self._platform_indices:
+            p = self._nodes[p_idx]
+            _, raw_indices = self._walk_tree.query((p.lat, p.lng), k=ENTRANCE_K)
+            for ki in raw_indices:
+                w_idx = self._walk_indices[int(ki)]
+                if (p_idx, w_idx) in existing:
+                    continue
+                w = self._nodes[w_idx]
+                d_m = haversine_m(p.lat, p.lng, w.lat, w.lng)
+                if d_m > ENTRANCE_R_MAX_M:
+                    continue
+                t = d_m / WALK_SPEED_MPS
+                self._adj[w_idx].append(_Edge(to_idx=p_idx, weight=t, kind="entrance"))
+                self._adj[p_idx].append(_Edge(to_idx=w_idx, weight=t, kind="entrance"))
+                existing.add((p_idx, w_idx))
 
     # ---------------- public ----------------
 
@@ -256,7 +319,34 @@ class PathfindingService:
         overlay.extra_adj.setdefault(end_walk_idx, []).append(
             _Edge(to_idx=end_idx, weight=t_end, kind="walk")
         )
+
+        # If the endpoint is right next to a real platform, link directly so
+        # A* can finish at the station instead of a nearby walk node.
+        start_plat = self._nearest_platform(lat_s, lng_s)
+        if start_plat is not None:
+            p_idx, d_m = start_plat
+            overlay.extra_adj[start_idx].append(
+                _Edge(to_idx=p_idx, weight=d_m / WALK_SPEED_MPS, kind="walk")
+            )
+        end_plat = self._nearest_platform(lat_e, lng_e)
+        if end_plat is not None:
+            p_idx, d_m = end_plat
+            overlay.extra_adj.setdefault(p_idx, []).append(
+                _Edge(to_idx=end_idx, weight=d_m / WALK_SPEED_MPS, kind="walk")
+            )
+
         return overlay, start_idx, end_idx
+
+    def _nearest_platform(self, lat: float, lng: float) -> tuple[int, float] | None:
+        if self._platform_tree is None or not self._platform_indices:
+            return None
+        _, raw_idx = self._platform_tree.query((lat, lng), k=1)
+        p_idx = self._platform_indices[int(raw_idx)]
+        p = self._nodes[p_idx]
+        d_m = haversine_m(lat, lng, p.lat, p.lng)
+        if d_m > STATION_SNAP_R_M:
+            return None
+        return p_idx, d_m
 
     def _is_blocked(self, from_idx: int, edge: _Edge, closures: ClosureMask) -> bool:
         if not closures.blocked_stations and not closures.blocked_segments and not closures.blocked_lines:
@@ -281,6 +371,19 @@ class PathfindingService:
             if to_n and to_n.line_id in closures.blocked_lines:
                 return True
         elif edge.kind == "entrance":
+            if to_n and to_n.kind == "platform":
+                if to_n.station_id in closures.blocked_stations:
+                    return True
+                if to_n.line_id in closures.blocked_lines:
+                    return True
+            if from_n and from_n.kind == "platform":
+                if from_n.station_id in closures.blocked_stations:
+                    return True
+                if from_n.line_id in closures.blocked_lines:
+                    return True
+        elif edge.kind == "walk":
+            # Overlay edges can connect virtual endpoints straight to a
+            # platform; respect closures on the platform end too.
             if to_n and to_n.kind == "platform":
                 if to_n.station_id in closures.blocked_stations:
                     return True

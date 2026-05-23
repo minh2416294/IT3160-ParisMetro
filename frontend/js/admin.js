@@ -31,9 +31,28 @@ async function initDashboard() {
   showDashboard();
   initMap("map");
   await loadNetwork();
+  initPathfindingUI();
+  installModeMutex();
+  setAllLinesVisible(true);
+  setAllStationsVisible(true);
+  const cbs = document.querySelectorAll("#line-toggles input[type=checkbox]");
+  cbs.forEach((c) => (c.checked = true));
   wireStationClicks();
   populateLineDropdown();
   await refreshScenarios();
+}
+
+function installModeMutex() {
+  const origSetClickMode = setClickMode;
+  const origSetAdminMode = setAdminMode;
+  setClickMode = function (mode) {
+    if (mode) origSetAdminMode(null);
+    origSetClickMode(mode);
+  };
+  setAdminMode = function (mode) {
+    if (mode) origSetClickMode(null);
+    origSetAdminMode(mode);
+  };
 }
 
 function wireStationClicks() {
@@ -77,6 +96,22 @@ function setAdminMode(mode) {
 }
 
 async function onStationClick(station) {
+  if (clickMode === "start" || clickMode === "end") {
+    const role = clickMode;
+    if (role === "start") {
+      startPt = { lat: station.lat, lng: station.lng };
+      setEndpointMarker("start", station.lat, station.lng);
+      document.getElementById("start-coord").textContent = fmtCoord(station.lat, station.lng);
+      document.getElementById("input-start").value = station.name;
+    } else {
+      endPt = { lat: station.lat, lng: station.lng };
+      setEndpointMarker("end", station.lat, station.lng);
+      document.getElementById("end-coord").textContent = fmtCoord(station.lat, station.lng);
+      document.getElementById("input-end").value = station.name;
+    }
+    setClickMode(null);
+    return;
+  }
   if (adminMode === "station") {
     await createScenario("station", { station_id: station.id });
     setAdminMode(null);
@@ -165,6 +200,7 @@ async function refreshScenarios() {
   const resp = await fetch(`${API_BASE}/api/scenarios`);
   if (!resp.ok) return;
   const items = await resp.json();
+  applyClosures(items);
   if (items.length === 0) {
     listEl.innerHTML = "<li class='empty'>No active scenarios.</li>";
     return;
