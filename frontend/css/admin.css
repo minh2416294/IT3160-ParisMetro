@@ -127,3 +127,13 @@ select {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+.closure-icon {
+  color: #c62828;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 18px;
+  text-align: center;
+  text-shadow: 0 0 3px white, 0 0 3px white, 0 0 3px white;
+  pointer-events: none;
+}

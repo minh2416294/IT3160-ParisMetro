@@ -20,6 +20,8 @@ class Station(BaseModel):
 
 class Segment(BaseModel):
     line_id: str
+    from_station_id: str
+    to_station_id: str
     from_lat: float
     from_lng: float
     to_lat: float
@@ -44,12 +46,12 @@ def get_network() -> NetworkResponse:
     # Aggregate platforms into unique stations.
     station_map: dict[str, dict] = {}
     lines_by_station: dict[str, set[str]] = defaultdict(set)
-    platform_coords: dict[int, tuple[float, float, str]] = {}
+    platform_info: dict[int, tuple[float, float, str, str]] = {}
 
     for r in platform_rows:
         sid = r["station_id"]
         lines_by_station[sid].add(r["line_id"])
-        platform_coords[r["id"]] = (r["lat"], r["lng"], r["line_id"])
+        platform_info[r["id"]] = (r["lat"], r["lng"], r["line_id"], sid)
         if sid not in station_map:
             station_map[sid] = {
                 "id": sid,
@@ -72,13 +74,15 @@ def get_network() -> NetworkResponse:
         if key in seen:
             continue
         seen.add(key)
-        if a not in platform_coords or b not in platform_coords:
+        if a not in platform_info or b not in platform_info:
             continue
-        la, lga, _ = platform_coords[a]
-        lb, lgb, _ = platform_coords[b]
+        la, lga, _, sa = platform_info[a]
+        lb, lgb, _, sb = platform_info[b]
         segments.append(
             Segment(
                 line_id=r["line_id"],
+                from_station_id=sa,
+                to_station_id=sb,
                 from_lat=la,
                 from_lng=lga,
                 to_lat=lb,
