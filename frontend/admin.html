@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/css/style.css" />
     <link rel="stylesheet" href="/css/admin.css" />
   </head>
-  <body>
+  <body data-page="admin">
     <header class="topbar">
       <h1>Paris Metro Navigator — Admin</h1>
       <nav>
@@ -41,6 +41,49 @@
 
     <main id="dashboard" class="app" style="display: none">
       <aside class="sidebar">
+        <section class="panel">
+          <h2>Plan a route</h2>
+          <div class="row">
+            <button id="btn-pick-start" class="primary-btn">Pick start</button>
+            <span id="start-coord" class="coord">—</span>
+          </div>
+          <div class="row">
+            <div class="station-search">
+              <input type="text" id="input-start" class="station-input" placeholder="Or type a station name…" autocomplete="off">
+              <ul class="station-dropdown" id="dropdown-start"></ul>
+            </div>
+          </div>
+          <div class="row">
+            <button id="btn-pick-end" class="primary-btn">Pick end</button>
+            <span id="end-coord" class="coord">—</span>
+          </div>
+          <div class="row">
+            <div class="station-search">
+              <input type="text" id="input-end" class="station-input" placeholder="Or type a station name…" autocomplete="off">
+              <ul class="station-dropdown" id="dropdown-end"></ul>
+            </div>
+          </div>
+          <div class="row">
+            <button id="btn-find" class="accent-btn">Find path</button>
+            <button id="btn-reset" class="ghost-btn">Reset</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Itinerary</h2>
+          <div id="result-banner"></div>
+          <ol id="result-steps" class="steps"></ol>
+        </section>
+
+        <section class="panel">
+          <h2>Filter lines</h2>
+          <div id="line-toggles" class="line-toggles"></div>
+          <div class="row" style="margin-top: 8px">
+            <button id="btn-show-all-lines" class="ghost-btn">Show all</button>
+            <button id="btn-hide-all-lines" class="ghost-btn">Hide all</button>
+          </div>
+        </section>
+
         <section class="panel">
           <h2>Create scenario</h2>
           <div class="row">
@@ -81,6 +124,7 @@
     <script src="/js/config.js"></script>
     <script src="/js/map.js"></script>
     <script src="/js/auth.js"></script>
+    <script src="/js/pathfinding.js"></script>
     <script src="/js/admin.js"></script>
   </body>
 </html>
