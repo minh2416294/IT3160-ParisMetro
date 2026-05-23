@@ -85,6 +85,7 @@ async function findPath() {
     }
     const data = await resp.json();
     renderItinerary(data);
+    revealLinesForRoute(data.steps);
     drawRoute(data.coords);
     setEndpointMarker("start", startPt.lat, startPt.lng);
     setEndpointMarker("end", endPt.lat, endPt.lng);
@@ -132,6 +133,7 @@ function formatStepText(s) {
 
 async function loadDisruptionBanner() {
   const el = document.getElementById("disruption-banner");
+  if (!el) return;
   try {
     const resp = await fetch(`${API_BASE}/api/scenarios`);
     if (!resp.ok) return;
@@ -160,6 +162,7 @@ function resetSelection() {
   document.getElementById("result-banner").textContent = "";
   document.getElementById("result-banner").className = "";
   document.getElementById("result-steps").innerHTML = "";
+  setAllToggles(false);
 }
 
 function buildLineFilter() {
@@ -171,8 +174,12 @@ function buildLineFilter() {
     label.className = "line-toggle";
     const cb = document.createElement("input");
     cb.type = "checkbox";
-    cb.checked = true;
-    cb.addEventListener("change", () => setLineVisible(lid, cb.checked));
+    cb.checked = false;
+    cb.dataset.lineId = lid;
+    cb.addEventListener("change", () => {
+      setLineVisible(lid, cb.checked);
+      setStationsVisibleForLines(currentlyVisibleLineIds());
+    });
     const badge = document.createElement("span");
     badge.className = "line-badge";
     badge.style.backgroundColor = colorForLine(lid);
@@ -185,8 +192,23 @@ function buildLineFilter() {
 
 function setAllToggles(visible) {
   setAllLinesVisible(visible);
+  setStationsVisibleForLines(visible ? getAllLineIds() : []);
   const cbs = document.querySelectorAll("#line-toggles input[type=checkbox]");
   cbs.forEach((c) => (c.checked = visible));
+}
+
+function revealLinesForRoute(steps) {
+  const used = new Set();
+  for (const s of steps) {
+    if (s.line_id && (s.kind === "ride" || s.kind === "enter" || s.kind === "transfer")) {
+      used.add(s.line_id);
+    }
+  }
+  setAllLinesVisible(false);
+  for (const lid of used) setLineVisible(lid, true);
+  setStationsVisibleForLines([...used]);
+  const cbs = document.querySelectorAll("#line-toggles input[type=checkbox]");
+  cbs.forEach((c) => (c.checked = used.has(c.dataset.lineId)));
 }
 
 function normalizeText(str) {
@@ -278,8 +300,7 @@ function setupStationSearch(inputId, dropdownId, role) {
   });
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  initMap("map");
+function initPathfindingUI() {
   map.on("click", onMapClick);
 
   document.getElementById("btn-pick-start").addEventListener("click", () => setClickMode("start"));
@@ -289,15 +310,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-show-all-lines").addEventListener("click", () => setAllToggles(true));
   document.getElementById("btn-hide-all-lines").addEventListener("click", () => setAllToggles(false));
 
+  buildLineFilter();
+  setupStationSearch("input-start", "dropdown-start", "start");
+  setupStationSearch("input-end", "dropdown-end", "end");
+  loadDisruptionBanner();
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if (document.body.dataset.page !== "user") return;
+  initMap("map");
   try {
     await loadNetwork();
-    buildLineFilter();
-    setupStationSearch("input-start", "dropdown-start", "start");
-    setupStationSearch("input-end", "dropdown-end", "end");
+    initPathfindingUI();
   } catch (e) {
     const banner = document.getElementById("result-banner");
     banner.className = "error";
     banner.textContent = `Failed to load network: ${e.message}`;
   }
-  loadDisruptionBanner();
 });
