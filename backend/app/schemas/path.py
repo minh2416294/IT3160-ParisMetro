@@ -18,7 +18,14 @@ class PathStepOut(BaseModel):
     line_id: str | None = None
 
 
+class PathSegmentOut(BaseModel):
+    kind: str
+    line_id: str | None = None
+    coords: list[tuple[float, float]]
+
+
 class PathResponse(BaseModel):
     total_time_s: float
     steps: list[PathStepOut]
     coords: list[tuple[float, float]]  # [(lat, lng), ...]
+    route_segments: list[PathSegmentOut] = []

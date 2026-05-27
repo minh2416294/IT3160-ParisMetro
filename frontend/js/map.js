@@ -1,13 +1,16 @@
 // Leaflet setup, network rendering, route drawing, endpoint markers.
 
 let map;
-let stationLayer;        // L.LayerGroup for station markers
+let stationLayer;        // L.LayerGroup for platform markers
+let entranceLayer;       // L.LayerGroup for entrance markers
 let routeLayer;          // L.LayerGroup for the computed route + endpoint pins
 let closureLayer;        // L.LayerGroup for X markers on closed stations
 let lineLayers = {};     // line_id -> L.LayerGroup of polylines
 let lineVisibility = {}; // line_id -> bool
-let stationMarkers = {}; // station_id -> L.CircleMarker
-let stationVisibility = {}; // station_id -> bool
+let stationMarkers = {}; // platform_id -> L.CircleMarker
+let stationVisibility = {}; // platform_id -> bool
+let entranceMarkers = {}; // platform_id -> L.Marker for entrances
+let entranceVisibility = {}; // platform_id -> bool
 let segmentLayers = {};  // line_id -> [{fromStationId, toStationId, polyline}]
 let closedLines = new Set();    // line_ids admin-closed
 let closedSegments = new Set(); // keys "line|from|to"
@@ -17,8 +20,9 @@ let networkData = null;  // cached /api/network response
 function initMap(elementId = "map") {
   map = L.map(elementId).setView(MAP_CENTER, MAP_ZOOM);
   L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
-  stationLayer = L.layerGroup().addTo(map);
   routeLayer = L.layerGroup().addTo(map);
+  stationLayer = L.layerGroup().addTo(map);
+  entranceLayer = L.layerGroup().addTo(map);
   closureLayer = L.layerGroup().addTo(map);
   return map;
 }
@@ -39,9 +43,12 @@ function renderNetwork(data) {
   lineVisibility = {};
   segmentLayers = {};
   stationLayer.clearLayers();
+  entranceLayer.clearLayers();
   if (closureLayer) closureLayer.clearLayers();
   stationMarkers = {};
   stationVisibility = {};
+  entranceMarkers = {};
+  entranceVisibility = {};
   closedLines = new Set();
   closedSegments = new Set();
   closedStations = new Set();
@@ -60,7 +67,7 @@ function renderNetwork(data) {
       {
         color: colorForLine(seg.line_id),
         weight: 4,
-        opacity: 0.85,
+        opacity: 0.6,
       }
     ).addTo(lineLayers[seg.line_id]);
     segmentLayers[seg.line_id].push({
@@ -70,20 +77,41 @@ function renderNetwork(data) {
     });
   }
 
-  for (const st of data.stations) {
-    const marker = L.circleMarker([st.lat, st.lng], {
-      radius: 4,
-      color: "#222",
-      weight: 1,
+  for (const plat of data.platforms) {
+    const marker = L.circleMarker([plat.lat, plat.lng], {
+      radius: 6,
+      color: "#000",
+      weight: 2,
       fillColor: "#fff",
       fillOpacity: 1,
-    }).bindTooltip(`<b>${st.name}</b><br>Lines: ${st.lines.join(", ")}`);
-    marker.stationId = st.id;
-    marker.stationName = st.name;
-    marker.stationLines = st.lines;
-    stationMarkers[st.id] = marker;
-    stationVisibility[st.id] = false;
+    }).bindTooltip(`<b>${plat.station_name}</b><br>Line ${plat.line_id}`);
+    marker.platformId = plat.id;
+    marker.stationId = plat.station_id;
+    marker.lineId = plat.line_id;
+    stationMarkers[plat.id] = marker;
+    stationVisibility[plat.id] = true;
+    // add platforms to layer by default (so they are visible and above routes)
+    stationLayer.addLayer(marker);
   }
+
+  for (const entrance of data.entrances) {
+    const icon = L.divIcon({
+      className: "entrance-icon",
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+    const marker = L.marker([entrance.lat, entrance.lng], {
+      icon,
+      interactive: false,
+      opacity: 0.95,
+    });
+    marker.platformId = entrance.platform_id;
+    entranceMarkers[entrance.platform_id] = marker;
+    entranceVisibility[entrance.platform_id] = true;
+    // add entrances to layer by default
+    entranceLayer.addLayer(marker);
+  }
+  bringMarkersToFront();
 }
 
 function setLineVisible(lineId, visible) {
@@ -177,6 +205,15 @@ function setStationVisible(stationId, visible) {
   } else {
     if (stationLayer.hasLayer(marker)) stationLayer.removeLayer(marker);
   }
+  const entrance = entranceMarkers[stationId];
+  if (entrance) {
+    entranceVisibility[stationId] = visible;
+    if (visible) {
+      if (!entranceLayer.hasLayer(entrance)) entranceLayer.addLayer(entrance);
+    } else {
+      if (entranceLayer.hasLayer(entrance)) entranceLayer.removeLayer(entrance);
+    }
+  }
 }
 
 function setAllStationsVisible(visible) {
@@ -186,9 +223,9 @@ function setAllStationsVisible(visible) {
 function setStationsVisibleForLines(lineIds) {
   const wanted = new Set(lineIds);
   if (!networkData) return;
-  for (const st of networkData.stations) {
-    const show = st.lines.some((l) => wanted.has(l));
-    setStationVisible(st.id, show);
+  for (const plat of networkData.platforms) {
+    const show = wanted.has(plat.line_id);
+    setStationVisible(String(plat.id), show);
   }
 }
 
@@ -217,6 +254,71 @@ function drawRoute(coords) {
   if (!coords || coords.length < 2) return;
   const latlngs = coords.map((c) => [c[0], c[1]]);
   L.polyline(latlngs, { color: "#1f3b8b", weight: 6, opacity: 0.9 }).addTo(routeLayer);
+  bringMarkersToFront();
+}
+
+function drawRouteSegments(segments) {
+  clearRoute();
+  for (const seg of segments) {
+    if (!seg.coords || seg.coords.length < 2) continue;
+    const latlngs = seg.coords.map((c) => [c[0], c[1]]);
+    const opts = routeStyleForKind(seg.kind);
+    L.polyline(latlngs, opts).addTo(routeLayer);
+  }
+  bringMarkersToFront();
+}
+
+function bringMarkersToFront() {
+  if (routeLayer && map.hasLayer(routeLayer)) {
+    map.removeLayer(routeLayer);
+    map.addLayer(routeLayer);
+  }
+  if (stationLayer && map.hasLayer(stationLayer)) {
+    map.removeLayer(stationLayer);
+    map.addLayer(stationLayer);
+  }
+  if (entranceLayer && map.hasLayer(entranceLayer)) {
+    map.removeLayer(entranceLayer);
+    map.addLayer(entranceLayer);
+  }
+  if (closureLayer && map.hasLayer(closureLayer)) {
+    map.removeLayer(closureLayer);
+    map.addLayer(closureLayer);
+  }
+}
+
+function routeStyleForKind(kind) {
+  switch (kind) {
+    case "ride":
+      return {
+        color: "#d62828",
+        weight: 6,
+        opacity: 0.95,
+      };
+    case "transfer":
+      return {
+        color: "#b084ff",
+        weight: 4,
+        opacity: 0.9,
+        dashArray: "2 8",
+      };
+    case "entrance":
+    case "walk":
+    case "exit":
+    case "enter":
+      return {
+        color: "#5bc0ff",
+        weight: 4,
+        opacity: 0.9,
+        dashArray: "8 6",
+      };
+    default:
+      return {
+        color: "#1f3b8b",
+        weight: 4,
+        opacity: 0.8,
+      };
+  }
 }
 
 function setEndpointMarker(kind, lat, lng) {

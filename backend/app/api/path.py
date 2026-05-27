@@ -40,4 +40,12 @@ def find_path(
             for s in result.steps
         ],
         coords=result.coords,
+        route_segments=[
+            {
+                "kind": seg.kind,
+                "line_id": seg.line_id,
+                "coords": seg.coords,
+            }
+            for seg in result.route_segments
+        ],
     )

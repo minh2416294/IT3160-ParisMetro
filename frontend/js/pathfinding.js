@@ -86,7 +86,11 @@ async function findPath() {
     const data = await resp.json();
     renderItinerary(data);
     revealLinesForRoute(data.steps);
-    drawRoute(data.coords);
+    if (data.route_segments && data.route_segments.length > 0) {
+      drawRouteSegments(data.route_segments);
+    } else {
+      drawRoute(data.coords);
+    }
     setEndpointMarker("start", startPt.lat, startPt.lng);
     setEndpointMarker("end", endPt.lat, endPt.lng);
   } catch (e) {
