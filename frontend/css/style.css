@@ -267,6 +267,17 @@ button:active {
   box-shadow: var(--shadow);
 }
 
+.entrance-icon {
+  box-sizing: border-box;
+  border: 2px solid #888;
+  background-color: #f5f5f5;
+  width: 10px;
+  height: 10px;
+  display: block;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+}
+
 .error {
   color: var(--danger);
   font-size: 13px;

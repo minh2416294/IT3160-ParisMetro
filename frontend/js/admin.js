@@ -58,10 +58,14 @@ function installModeMutex() {
 function wireStationClicks() {
   const data = getNetworkData();
   if (!data) return;
-  for (const st of data.stations) {
-    const marker = getStationMarker(st.id);
+  const stationById = new Map(data.stations.map((st) => [String(st.id), st]));
+  for (const plat of data.platforms) {
+    const marker = stationMarkers[plat.id];
     if (!marker) continue;
-    marker.on("click", () => onStationClick(st));
+    const station = stationById.get(String(plat.station_id));
+    if (!station) continue;
+
+    marker.on("click", () => onStationClick(station));
   }
 }
 
@@ -84,7 +88,9 @@ function populateLineDropdown() {
 
 function setAdminMode(mode) {
   adminMode = mode;
-  segmentFirst = null;
+  if(mode !== "segment-b") {
+    segmentFirst = null;
+  }
   for (const id of ["btn-mode-station", "btn-mode-segment"]) {
     document.getElementById(id).classList.toggle("active", id === `btn-mode-${mode?.split("-")[0]}`);
   }
@@ -125,6 +131,7 @@ async function onStationClick(station) {
     }
     segmentFirst = { station_id: station.id, station_name: station.name, line_id: line };
     setAdminMode("segment-b");
+    confirm(`First station selected: ${station.name} on Line ${line}. Click OK, then select the second station of the segment to close.`); // alert + mode change is a bit janky, so added confirm to at least explain next step  
     return;
   }
   if (adminMode === "segment-b") {

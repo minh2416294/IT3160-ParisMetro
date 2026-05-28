@@ -81,10 +81,18 @@ class PathStep:
 
 
 @dataclass
+class RouteSegment:
+    kind: str
+    line_id: str | None
+    coords: list[tuple[float, float]]
+
+
+@dataclass
 class PathResult:
     total_time_s: float
     steps: list[PathStep]
     coords: list[tuple[float, float]]
+    route_segments: list[RouteSegment]
 
 
 class PathNotFoundError(Exception):
@@ -476,6 +484,7 @@ class PathfindingService:
             return total
 
         steps: list[PathStep] = []
+        route_segments: list[RouteSegment] = []
         i = 0
         while i < len(path_edges):
             edge = path_edges[i]
@@ -491,6 +500,13 @@ class PathfindingService:
                 dist = segment_distance(i, j)
                 steps.append(
                     PathStep(kind="walk", description="Walk", duration_s=dur, distance_m=dist)
+                )
+                route_segments.append(
+                    RouteSegment(
+                        kind="walk",
+                        line_id=None,
+                        coords=[self._coord(k, overlay) for k in path_idx[i : j + 1]],
+                    )
                 )
                 i = j
                 continue
@@ -516,6 +532,13 @@ class PathfindingService:
                             distance_m=segment_distance(i, i + 1),
                         )
                     )
+                route_segments.append(
+                    RouteSegment(
+                        kind="entrance",
+                        line_id=to_node.line_id if to_node else None,
+                        coords=[self._coord(path_idx[i], overlay), self._coord(path_idx[i + 1], overlay)],
+                    )
+                )
                 i += 1
                 continue
 
@@ -543,6 +566,13 @@ class PathfindingService:
                         line_id=edge.line_id,
                     )
                 )
+                route_segments.append(
+                    RouteSegment(
+                        kind="ride",
+                        line_id=edge.line_id,
+                        coords=[self._coord(k, overlay) for k in path_idx[i : j + 1]],
+                    )
+                )
                 i = j
                 continue
 
@@ -558,9 +588,21 @@ class PathfindingService:
                         line_id=line_to,
                     )
                 )
+                route_segments.append(
+                    RouteSegment(
+                        kind="transfer",
+                        line_id=line_to,
+                        coords=[self._coord(path_idx[i], overlay), self._coord(path_idx[i + 1], overlay)],
+                    )
+                )
                 i += 1
                 continue
 
             i += 1  # fallback
 
-        return PathResult(total_time_s=total_time, steps=steps, coords=coords)
+        return PathResult(
+            total_time_s=total_time,
+            steps=steps,
+            coords=coords,
+            route_segments=route_segments,
+        )

@@ -18,6 +18,21 @@ class Station(BaseModel):
     lines: list[str]
 
 
+class Platform(BaseModel):
+    id: int
+    station_id: str
+    station_name: str
+    line_id: str
+    lat: float
+    lng: float
+
+
+class Entrance(BaseModel):
+    platform_id: int
+    lat: float
+    lng: float
+
+
 class Segment(BaseModel):
     line_id: str
     from_station_id: str
@@ -30,6 +45,8 @@ class Segment(BaseModel):
 
 class NetworkResponse(BaseModel):
     stations: list[Station]
+    platforms: list[Platform]
+    entrances: list[Entrance]
     segments: list[Segment]
 
 
@@ -38,6 +55,9 @@ def get_network() -> NetworkResponse:
     with get_db_connection() as conn:
         platform_rows = conn.execute(
             "SELECT id, station_id, station_name, line_id, lat, lng FROM platforms"
+        ).fetchall()
+        entrance_rows = conn.execute(
+            "SELECT e.platform_id, n.lat, n.lng FROM entrance_edges e JOIN walk_nodes n ON e.walk_node_id = n.id"
         ).fetchall()
         ride_rows = conn.execute(
             "SELECT from_platform, to_platform, line_id FROM ride_edges"
@@ -48,6 +68,7 @@ def get_network() -> NetworkResponse:
     lines_by_station: dict[str, set[str]] = defaultdict(set)
     platform_info: dict[int, tuple[float, float, str, str]] = {}
 
+    platforms: list[Platform] = []
     for r in platform_rows:
         sid = r["station_id"]
         lines_by_station[sid].add(r["line_id"])
@@ -59,10 +80,25 @@ def get_network() -> NetworkResponse:
                 "lat": r["lat"],
                 "lng": r["lng"],
             }
+        platforms.append(
+            Platform(
+                id=r["id"],
+                station_id=sid,
+                station_name=r["station_name"],
+                line_id=r["line_id"],
+                lat=r["lat"],
+                lng=r["lng"],
+            )
+        )
 
     stations = [
         Station(**info, lines=sorted(lines_by_station[sid]))
         for sid, info in station_map.items()
+    ]
+
+    entrances = [
+        Entrance(platform_id=r["platform_id"], lat=r["lat"], lng=r["lng"])
+        for r in entrance_rows
     ]
 
     # One segment per directed ride edge. Frontend dedups by coloring.
@@ -90,4 +126,9 @@ def get_network() -> NetworkResponse:
             )
         )
 
-    return NetworkResponse(stations=stations, segments=segments)
+    return NetworkResponse(
+        stations=stations,
+        platforms=platforms,
+        entrances=entrances,
+        segments=segments,
+    )

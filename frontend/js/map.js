@@ -1,13 +1,16 @@
 // Leaflet setup, network rendering, route drawing, endpoint markers.
 
 let map;
-let stationLayer;        // L.LayerGroup for station markers
+let stationLayer;        // L.LayerGroup for platform markers
+let entranceLayer;       // L.LayerGroup for entrance markers
 let routeLayer;          // L.LayerGroup for the computed route + endpoint pins
 let closureLayer;        // L.LayerGroup for X markers on closed stations
 let lineLayers = {};     // line_id -> L.LayerGroup of polylines
 let lineVisibility = {}; // line_id -> bool
-let stationMarkers = {}; // station_id -> L.CircleMarker
-let stationVisibility = {}; // station_id -> bool
+let stationMarkers = {}; // platform_id -> L.CircleMarker
+let stationVisibility = {}; // platform_id -> bool
+let entranceMarkers = {}; // platform_id -> L.Marker for entrances
+let entranceVisibility = {}; // platform_id -> bool
 let segmentLayers = {};  // line_id -> [{fromStationId, toStationId, polyline}]
 let closedLines = new Set();    // line_ids admin-closed
 let closedSegments = new Set(); // keys "line|from|to"
@@ -17,8 +20,9 @@ let networkData = null;  // cached /api/network response
 function initMap(elementId = "map") {
   map = L.map(elementId).setView(MAP_CENTER, MAP_ZOOM);
   L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
-  stationLayer = L.layerGroup().addTo(map);
   routeLayer = L.layerGroup().addTo(map);
+  stationLayer = L.layerGroup().addTo(map);
+  entranceLayer = L.layerGroup().addTo(map);
   closureLayer = L.layerGroup().addTo(map);
   return map;
 }
@@ -39,9 +43,12 @@ function renderNetwork(data) {
   lineVisibility = {};
   segmentLayers = {};
   stationLayer.clearLayers();
+  entranceLayer.clearLayers();
   if (closureLayer) closureLayer.clearLayers();
   stationMarkers = {};
   stationVisibility = {};
+  entranceMarkers = {};
+  entranceVisibility = {};
   closedLines = new Set();
   closedSegments = new Set();
   closedStations = new Set();
@@ -60,7 +67,7 @@ function renderNetwork(data) {
       {
         color: colorForLine(seg.line_id),
         weight: 4,
-        opacity: 0.85,
+        opacity: 0.6,
       }
     ).addTo(lineLayers[seg.line_id]);
     segmentLayers[seg.line_id].push({
@@ -70,20 +77,41 @@ function renderNetwork(data) {
     });
   }
 
-  for (const st of data.stations) {
-    const marker = L.circleMarker([st.lat, st.lng], {
-      radius: 4,
-      color: "#222",
-      weight: 1,
+  for (const plat of data.platforms) {
+    const marker = L.circleMarker([plat.lat, plat.lng], {
+      radius: 6,
+      color: "#000",
+      weight: 2,
       fillColor: "#fff",
       fillOpacity: 1,
-    }).bindTooltip(`<b>${st.name}</b><br>Lines: ${st.lines.join(", ")}`);
-    marker.stationId = st.id;
-    marker.stationName = st.name;
-    marker.stationLines = st.lines;
-    stationMarkers[st.id] = marker;
-    stationVisibility[st.id] = false;
+    }).bindTooltip(`<b>${plat.station_name}</b><br>Line ${plat.line_id}`);
+    marker.platformId = plat.id;
+    marker.stationId = plat.station_id;
+    marker.lineId = plat.line_id;
+    stationMarkers[plat.id] = marker;
+    stationVisibility[plat.id] = true;
+    // add platforms to layer by default (so they are visible and above routes)
+    stationLayer.addLayer(marker);
   }
+
+  for (const entrance of data.entrances) {
+    const icon = L.divIcon({
+      className: "entrance-icon",
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+    const marker = L.marker([entrance.lat, entrance.lng], {
+      icon,
+      interactive: false,
+      opacity: 0.95,
+    });
+    marker.platformId = entrance.platform_id;
+    entranceMarkers[entrance.platform_id] = marker;
+    entranceVisibility[entrance.platform_id] = true;
+    // add entrances to layer by default
+    entranceLayer.addLayer(marker);
+  }
+  bringMarkersToFront();
 }
 
 function setLineVisible(lineId, visible) {
@@ -101,23 +129,65 @@ function setLineVisible(lineId, visible) {
 function applyClosures(scenarios) {
   if (!networkData) return;
   closureLayer.clearLayers();
-
-  for (const lid of closedLines) {
+  // Restore all segment styles to their original line color first.
+  for (const lid of Object.keys(segmentLayers)) {
     const segs = segmentLayers[lid] || [];
     for (const s of segs) {
-      if (!lineLayers[lid].hasLayer(s.polyline)) lineLayers[lid].addLayer(s.polyline);
+      try {
+        s.polyline.setStyle({ color: colorForLine(lid), weight: 4, opacity: 0.6 });
+      } catch (e) {
+        // ignore if polyline not present yet
+      }
     }
   }
-  for (const key of closedSegments) {
-    const [lid, from, to] = key.split("|");
-    const seg = findSegment(lid, from, to);
-    if (seg && !lineLayers[lid].hasLayer(seg.polyline)) {
-      lineLayers[lid].addLayer(seg.polyline);
-    }
-  }
+
+  // clear previous closure tracking
   closedLines = new Set();
   closedSegments = new Set();
   closedStations = new Set();
+
+  // Helper: find ordered list of segment objects connecting from->to on a line
+  function findSegmentPathSegments(lineId, fromStationId, toStationId) {
+    const list = segmentLayers[lineId];
+    if (!list) return null;
+    // build adjacency by station id -> neighboring station ids and mapping to segment
+    const adj = {};
+    const segMap = {};
+    for (const s of list) {
+      adj[s.fromStationId] = adj[s.fromStationId] || new Set();
+      adj[s.toStationId] = adj[s.toStationId] || new Set();
+      adj[s.fromStationId].add(s.toStationId);
+      adj[s.toStationId].add(s.fromStationId);
+      segMap[`${s.fromStationId}|${s.toStationId}`] = s;
+      segMap[`${s.toStationId}|${s.fromStationId}`] = s;
+    }
+    if (!adj[fromStationId] || !adj[toStationId]) return null;
+    // BFS to find station path
+    const q = [[fromStationId]];
+    const seen = new Set([fromStationId]);
+    while (q.length) {
+      const path = q.shift();
+      const cur = path[path.length - 1];
+      if (cur === toStationId) {
+        // convert station path to segment objects
+        const segsOut = [];
+        for (let i = 0; i < path.length - 1; i++) {
+          const a = path[i];
+          const b = path[i + 1];
+          const seg = segMap[`${a}|${b}`];
+          if (!seg) return null;
+          segsOut.push(seg);
+        }
+        return segsOut;
+      }
+      for (const nb of adj[cur]) {
+        if (seen.has(nb)) continue;
+        seen.add(nb);
+        q.push(path.concat([nb]));
+      }
+    }
+    return null;
+  }
 
   for (const s of scenarios) {
     if (s.type === "station") {
@@ -142,9 +212,41 @@ function applyClosures(scenarios) {
       const from = s.payload.from_station_id;
       const to = s.payload.to_station_id;
       closedSegments.add(`${lid}|${from}|${to}`);
-      const seg = findSegment(lid, from, to);
-      if (seg && lineLayers[lid].hasLayer(seg.polyline)) {
-        lineLayers[lid].removeLayer(seg.polyline);
+      // find the full path of contiguous segments on this line
+      const segs = findSegmentPathSegments(lid, from, to);
+      if (segs && segs.length) {
+        // gray-out each polyline and ensure visible
+        for (const seg of segs) {
+          if (lineLayers[lid] && !lineLayers[lid].hasLayer(seg.polyline)) {
+            lineLayers[lid].addLayer(seg.polyline);
+          }
+          try {
+            seg.polyline.setStyle({ color: "#999", weight: 4, opacity: 0.95 });
+          } catch (e) {}
+        }
+        // mark endpoints like closed stations
+        const startStation = networkData.stations.find((x) => x.id === from);
+        const endStation = networkData.stations.find((x) => x.id === to);
+        if (startStation) {
+          closedStations.add(from);
+          const icon = L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18, 18], iconAnchor: [9, 9] });
+          L.marker([startStation.lat, startStation.lng], { icon, interactive: false }).addTo(closureLayer);
+        }
+        if (endStation) {
+          closedStations.add(to);
+          const icon = L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18, 18], iconAnchor: [9, 9] });
+          L.marker([endStation.lat, endStation.lng], { icon, interactive: false }).addTo(closureLayer);
+        }
+      } else {
+        // fallback: try to find and hide the single direct segment
+        const seg = findSegment(lid, from, to);
+        if (seg) {
+          try { seg.polyline.setStyle({ color: "#999", weight: 4, opacity: 0.95 }); } catch (e) {}
+          const startStation = networkData.stations.find((x) => x.id === from);
+          const endStation = networkData.stations.find((x) => x.id === to);
+          if (startStation) L.marker([startStation.lat, startStation.lng], { icon: L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18,18], iconAnchor:[9,9] }), interactive:false }).addTo(closureLayer);
+          if (endStation) L.marker([endStation.lat, endStation.lng], { icon: L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18,18], iconAnchor:[9,9] }), interactive:false }).addTo(closureLayer);
+        }
       }
     }
   }
@@ -177,6 +279,15 @@ function setStationVisible(stationId, visible) {
   } else {
     if (stationLayer.hasLayer(marker)) stationLayer.removeLayer(marker);
   }
+  const entrance = entranceMarkers[stationId];
+  if (entrance) {
+    entranceVisibility[stationId] = visible;
+    if (visible) {
+      if (!entranceLayer.hasLayer(entrance)) entranceLayer.addLayer(entrance);
+    } else {
+      if (entranceLayer.hasLayer(entrance)) entranceLayer.removeLayer(entrance);
+    }
+  }
 }
 
 function setAllStationsVisible(visible) {
@@ -186,9 +297,9 @@ function setAllStationsVisible(visible) {
 function setStationsVisibleForLines(lineIds) {
   const wanted = new Set(lineIds);
   if (!networkData) return;
-  for (const st of networkData.stations) {
-    const show = st.lines.some((l) => wanted.has(l));
-    setStationVisible(st.id, show);
+  for (const plat of networkData.platforms) {
+    const show = wanted.has(plat.line_id);
+    setStationVisible(String(plat.id), show);
   }
 }
 
@@ -217,6 +328,71 @@ function drawRoute(coords) {
   if (!coords || coords.length < 2) return;
   const latlngs = coords.map((c) => [c[0], c[1]]);
   L.polyline(latlngs, { color: "#1f3b8b", weight: 6, opacity: 0.9 }).addTo(routeLayer);
+  bringMarkersToFront();
+}
+
+function drawRouteSegments(segments) {
+  clearRoute();
+  for (const seg of segments) {
+    if (!seg.coords || seg.coords.length < 2) continue;
+    const latlngs = seg.coords.map((c) => [c[0], c[1]]);
+    const opts = routeStyleForKind(seg.kind);
+    L.polyline(latlngs, opts).addTo(routeLayer);
+  }
+  bringMarkersToFront();
+}
+
+function bringMarkersToFront() {
+  if (routeLayer && map.hasLayer(routeLayer)) {
+    map.removeLayer(routeLayer);
+    map.addLayer(routeLayer);
+  }
+  if (stationLayer && map.hasLayer(stationLayer)) {
+    map.removeLayer(stationLayer);
+    map.addLayer(stationLayer);
+  }
+  if (entranceLayer && map.hasLayer(entranceLayer)) {
+    map.removeLayer(entranceLayer);
+    map.addLayer(entranceLayer);
+  }
+  if (closureLayer && map.hasLayer(closureLayer)) {
+    map.removeLayer(closureLayer);
+    map.addLayer(closureLayer);
+  }
+}
+
+function routeStyleForKind(kind) {
+  switch (kind) {
+    case "ride":
+      return {
+        color: "#d62828",
+        weight: 6,
+        opacity: 0.95,
+      };
+    case "transfer":
+      return {
+        color: "#b084ff",
+        weight: 4,
+        opacity: 0.9,
+        dashArray: "2 8",
+      };
+    case "entrance":
+    case "walk":
+    case "exit":
+    case "enter":
+      return {
+        color: "#5bc0ff",
+        weight: 4,
+        opacity: 0.9,
+        dashArray: "8 6",
+      };
+    default:
+      return {
+        color: "#1f3b8b",
+        weight: 4,
+        opacity: 0.8,
+      };
+  }
 }
 
 function setEndpointMarker(kind, lat, lng) {
