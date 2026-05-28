@@ -129,23 +129,65 @@ function setLineVisible(lineId, visible) {
 function applyClosures(scenarios) {
   if (!networkData) return;
   closureLayer.clearLayers();
-
-  for (const lid of closedLines) {
+  // Restore all segment styles to their original line color first.
+  for (const lid of Object.keys(segmentLayers)) {
     const segs = segmentLayers[lid] || [];
     for (const s of segs) {
-      if (!lineLayers[lid].hasLayer(s.polyline)) lineLayers[lid].addLayer(s.polyline);
+      try {
+        s.polyline.setStyle({ color: colorForLine(lid), weight: 4, opacity: 0.6 });
+      } catch (e) {
+        // ignore if polyline not present yet
+      }
     }
   }
-  for (const key of closedSegments) {
-    const [lid, from, to] = key.split("|");
-    const seg = findSegment(lid, from, to);
-    if (seg && !lineLayers[lid].hasLayer(seg.polyline)) {
-      lineLayers[lid].addLayer(seg.polyline);
-    }
-  }
+
+  // clear previous closure tracking
   closedLines = new Set();
   closedSegments = new Set();
   closedStations = new Set();
+
+  // Helper: find ordered list of segment objects connecting from->to on a line
+  function findSegmentPathSegments(lineId, fromStationId, toStationId) {
+    const list = segmentLayers[lineId];
+    if (!list) return null;
+    // build adjacency by station id -> neighboring station ids and mapping to segment
+    const adj = {};
+    const segMap = {};
+    for (const s of list) {
+      adj[s.fromStationId] = adj[s.fromStationId] || new Set();
+      adj[s.toStationId] = adj[s.toStationId] || new Set();
+      adj[s.fromStationId].add(s.toStationId);
+      adj[s.toStationId].add(s.fromStationId);
+      segMap[`${s.fromStationId}|${s.toStationId}`] = s;
+      segMap[`${s.toStationId}|${s.fromStationId}`] = s;
+    }
+    if (!adj[fromStationId] || !adj[toStationId]) return null;
+    // BFS to find station path
+    const q = [[fromStationId]];
+    const seen = new Set([fromStationId]);
+    while (q.length) {
+      const path = q.shift();
+      const cur = path[path.length - 1];
+      if (cur === toStationId) {
+        // convert station path to segment objects
+        const segsOut = [];
+        for (let i = 0; i < path.length - 1; i++) {
+          const a = path[i];
+          const b = path[i + 1];
+          const seg = segMap[`${a}|${b}`];
+          if (!seg) return null;
+          segsOut.push(seg);
+        }
+        return segsOut;
+      }
+      for (const nb of adj[cur]) {
+        if (seen.has(nb)) continue;
+        seen.add(nb);
+        q.push(path.concat([nb]));
+      }
+    }
+    return null;
+  }
 
   for (const s of scenarios) {
     if (s.type === "station") {
@@ -170,9 +212,41 @@ function applyClosures(scenarios) {
       const from = s.payload.from_station_id;
       const to = s.payload.to_station_id;
       closedSegments.add(`${lid}|${from}|${to}`);
-      const seg = findSegment(lid, from, to);
-      if (seg && lineLayers[lid].hasLayer(seg.polyline)) {
-        lineLayers[lid].removeLayer(seg.polyline);
+      // find the full path of contiguous segments on this line
+      const segs = findSegmentPathSegments(lid, from, to);
+      if (segs && segs.length) {
+        // gray-out each polyline and ensure visible
+        for (const seg of segs) {
+          if (lineLayers[lid] && !lineLayers[lid].hasLayer(seg.polyline)) {
+            lineLayers[lid].addLayer(seg.polyline);
+          }
+          try {
+            seg.polyline.setStyle({ color: "#999", weight: 4, opacity: 0.95 });
+          } catch (e) {}
+        }
+        // mark endpoints like closed stations
+        const startStation = networkData.stations.find((x) => x.id === from);
+        const endStation = networkData.stations.find((x) => x.id === to);
+        if (startStation) {
+          closedStations.add(from);
+          const icon = L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18, 18], iconAnchor: [9, 9] });
+          L.marker([startStation.lat, startStation.lng], { icon, interactive: false }).addTo(closureLayer);
+        }
+        if (endStation) {
+          closedStations.add(to);
+          const icon = L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18, 18], iconAnchor: [9, 9] });
+          L.marker([endStation.lat, endStation.lng], { icon, interactive: false }).addTo(closureLayer);
+        }
+      } else {
+        // fallback: try to find and hide the single direct segment
+        const seg = findSegment(lid, from, to);
+        if (seg) {
+          try { seg.polyline.setStyle({ color: "#999", weight: 4, opacity: 0.95 }); } catch (e) {}
+          const startStation = networkData.stations.find((x) => x.id === from);
+          const endStation = networkData.stations.find((x) => x.id === to);
+          if (startStation) L.marker([startStation.lat, startStation.lng], { icon: L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18,18], iconAnchor:[9,9] }), interactive:false }).addTo(closureLayer);
+          if (endStation) L.marker([endStation.lat, endStation.lng], { icon: L.divIcon({ className: "closure-icon", html: "✕", iconSize: [18,18], iconAnchor:[9,9] }), interactive:false }).addTo(closureLayer);
+        }
       }
     }
   }

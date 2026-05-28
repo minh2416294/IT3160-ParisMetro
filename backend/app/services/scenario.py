@@ -201,6 +201,12 @@ class ScenarioService:
                     if pa and pb:
                         path = self._find_segment_path(conn, line, pa, pb)
                         if path is not None:
+                            # also mark the endpoint stations as closed so the UI
+                            # renders them like closed stations
+                            if a:
+                                blocked_stations.add(a)
+                            if b:
+                                blocked_stations.add(b)
                             for x, y in zip(path, path[1:]):
                                 blocked_segments.add((x, y))
                                 blocked_segments.add((y, x))
